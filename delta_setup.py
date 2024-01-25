@@ -1,29 +1,42 @@
-from pyspark.sql import SparkSession
+from init_session import spark
 from pyspark.sql.types import StructField, StructType, StringType, IntegerType
-from delta.pip_utils import configure_spark_with_delta_pip
+# from pyspark.sql.functions import *
 
-builder = SparkSession.builder.appName("MyApp") \
-    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
-    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+def write_data():
+    # Create a spark dataframe and write as a delta table
+    print("Starting Delta table creation")
 
-spark = configure_spark_with_delta_pip(builder).getOrCreate()
-
-
-# Create a spark dataframe and write as a delta table
-print("Starting Delta table creation")
-
-data = [("Robert", "Baratheon", "Baratheon", "Storms End", 48),
+    schema = StructType([
+        StructField("firstname", StringType(), True),
+        StructField("lastname", StringType(), True),
+        StructField("house", StringType(), True),
+        StructField("location", StringType(), True),
+        StructField("age", IntegerType(), True)
+    ])
+    data = [
+        ("Robert", "Baratheon", "Baratheon", "Storms End", 48),
         ("Eddard", "Stark", "Stark", "Winterfell", 46),
         ("Jamie", "Lannister", "Lannister", "Casterly Rock", 29)
-        ]
-schema = StructType([
-    StructField("firstname", StringType(), True),
-    StructField("lastname", StringType(), True),
-    StructField("house", StringType(), True),
-    StructField("location", StringType(), True),
-    StructField("age", IntegerType(), True)
-])
+    ]
 
-sample_dataframe = spark.createDataFrame(data=data, schema=schema)
-sample_dataframe.write.mode(saveMode="overwrite").format("delta").save("data/delta-table")
+    sample_dataframe = spark.createDataFrame(data=data, schema=schema)
+    #sample_dataframe.write.mode(saveMode="append").format("delta").save("data/delta-table")
 
+    # Start running the query that prints the running counts to the console
+    query = sample_dataframe \
+        .writeStream \
+        .outputMode("complete") \
+        .format("console") \
+        .start()
+
+    query.awaitTermination()
+
+
+def read_data():
+    flights_delta = spark.read.format("delta").load("data/delta-table")
+    flights_delta.show()
+
+
+if __name__ == "__main__":
+    write_data()
+    # read_data()
