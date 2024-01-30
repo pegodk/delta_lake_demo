@@ -4,7 +4,7 @@ from pyspark.sql.types import StructType
 from pyspark.sql.functions import count_distinct
 
 
-def run_continuous():
+def bronze_ingestion_pipeline():
     # Read all the csv files written atomically in a directory
     user_schema = (
         StructType()
@@ -21,31 +21,31 @@ def run_continuous():
         .option("sep", ",")
         .option("header", True)
         .schema(user_schema)
-        .load("data/iot_input")
+        .load("data/landing")
     )
 
-    df_aggregate = (
+    (
         df_input
-        .groupBy(df_input.Location)
-        .count()
-    )
-
-    query = (
-        df_aggregate
         .writeStream
-        .format("console")  # memory = store in-memory table (for testing only)
-        .queryName("agg_counts")  # counts = name of the in-memory table
-        .outputMode("complete")  # complete = all the counts should be in the table
-        .option("checkpointLocation", "data/bronze")
-        #.trigger(Trigger.ProcessingTime("15 minutes"))
+        .format("console")
+        .outputMode("append")
         .start()
     )
 
-    query.awaitTermination()
-    return "Done"
+    query = (
+        df_input
+        .writeStream
+        .format("delta")  # memory = store in-memory table (for testing only)
+        .option("path", "data/bronze")
+        .queryName("bronze_ingestion")  # counts = name of the in-memory table
+        .outputMode("append")  # complete = all the counts should be in the table
+        .option("checkpointLocation", "data/bronze")
+        .start()
+    )
+    return query
 
 
 if __name__ == "__main__":
-    input_folder = os.path.join(os.getcwd(), "data", "iot_input")
 
-    run_continuous()
+    query = bronze_ingestion_pipeline()
+    query.awaitTermination()
