@@ -1,3 +1,4 @@
+import os
 from init_session import spark
 from pyspark.sql.types import StructType
 from pyspark.sql.functions import count_distinct
@@ -5,27 +6,38 @@ from pyspark.sql.functions import count_distinct
 
 def run_continuous():
     # Read all the csv files written atomically in a directory
-    userSchema = StructType().add("FirstName", "string").add("LastName", "string").add("Department", "string").add(
-        "Location", "string")
+    user_schema = (
+        StructType()
+        .add("FirstName", "string")
+        .add("LastName", "string")
+        .add("Department", "string")
+        .add("Location", "string")
+    )
 
-    streamingInputDF = spark \
-        .readStream \
-        .option("sep", ",") \
-        .schema(userSchema) \
-        .csv("data/iot_input/")  # Equivalent to format("csv").load("/path/to/directory")
+    df_input = (
+        spark
+        .readStream
+        .format("csv")
+        .option("sep", ",")
+        .option("header", True)
+        .schema(user_schema)
+        .load("data/iot_input")
+    )
 
-    streamingCountsDF = (
-        streamingInputDF
-        .groupBy(streamingInputDF.Location)
+    df_aggregate = (
+        df_input
+        .groupBy(df_input.Location)
         .count()
     )
 
     query = (
-        streamingCountsDF
+        df_aggregate
         .writeStream
         .format("console")  # memory = store in-memory table (for testing only)
         .queryName("agg_counts")  # counts = name of the in-memory table
         .outputMode("complete")  # complete = all the counts should be in the table
+        .option("checkpointLocation", "data/bronze")
+        #.trigger(Trigger.ProcessingTime("15 minutes"))
         .start()
     )
 
@@ -34,4 +46,6 @@ def run_continuous():
 
 
 if __name__ == "__main__":
+    input_folder = os.path.join(os.getcwd(), "data", "iot_input")
+
     run_continuous()
